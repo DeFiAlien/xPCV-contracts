@@ -11,6 +11,7 @@ import "../../Pausable.sol";
 import "../../interfaces/IController.sol";
 import "../../interfaces/IVault.sol";
 
+// reward vaults: single depositted asset + reward asset
 // yearn yVault reference: (https://github.com/yearn/yearn-protocol/blob/develop/contracts/vaults/yVault.sol)
 
 abstract contract RewardVault is ERC20, Pausable, ReentrancyGuard {

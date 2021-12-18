@@ -12,9 +12,27 @@ import "../../interfaces/IController.sol";
 import "../../interfaces/IVault.sol";
 import "../../interfaces/ISwapManager.sol";
 
+// GrowVault: vault of a single growing defi asset
+// 
 // yearn yVault reference: (https://github.com/yearn/yearn-protocol/blob/develop/contracts/vaults/yVault.sol)
 // issue: math not correct, should not sub stored balance.
+// VaultShare + RewardShare
+//
+// VaultShare deposit
+// when deposit new_added_amount and ask new_added_shares
+// (new_added_shares / old_total_supply) = new_added_amount / old_pool_balance
+// => new_added_shares = (new_added_amount / old_pool_balance) * old_total_supply
+// RewardShare = 
 
+// Use Case 1: user A deposited 
+// Use Case 2:
+
+
+/// @dev
+/// Life Circle:
+/// 1. Deposit: Tribe depositted to Vault
+/// 2. Farm: Tribe goes to the strategy and mine more Tribe
+/// 3. 
 abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Address for address;
@@ -23,16 +41,11 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
     /* ========== STATE VARIABLES ========== */
 
     IERC20 public token;
-    IERC20 public baseToken;
-
     uint256 public availableMin = 9500;
     uint256 public farmKeeperFeeMin = 0;
     uint256 public harvestKeeperFeeMin = 0;
     uint256 public constant MAX = 10000;
-    
-    uint256 public baseTokenPerShareStored;
-    mapping(address => uint256) public userBaseTokenPerSharePaid;
-    mapping(address => uint256) public userOwnedBaseToken; // baseToken user can claim
+
 
     address public governance;
     address public controller;
@@ -63,7 +76,6 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         string memory _name,
         string memory _symbol,
         address _token,
-        address _baseToken,
         address _controller
     ) public ERC20(_name, _symbol) {
         uint256 chainId;
@@ -72,7 +84,6 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         }
         _setupDecimals(ERC20(_token).decimals());
         token = IERC20(_token);
-        baseToken = IERC20(_baseToken);
         controller = _controller;
         governance = msg.sender;
         domainSeparator = keccak256(
@@ -152,23 +163,22 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         return balance().mul(1e18).div(totalSupply());
     }
 
-    /*
-        baseTokenEarned
-        latestEarnd (unpaid) + storedEarned = totalEarned
-    */
-    function baseTokenEarned(address account) public view returns (uint256) {
-        uint256 userShare = balanceOf(account);
-        return
-            userShare
-                .mul(baseTokenPerShareStored.sub(userBaseTokenPerSharePaid[account]))
-                .div(1e18)
-                .add(userOwnedBaseToken[account]);
-    }
+    // /*
+    //     baseTokenEarned
+    //     latestEarnd (unpaid) + storedEarned = totalEarned
+    // */
+    // function baseTokenEarned(address account) public view returns (uint256) {
+    //     uint256 userShare = balanceOf(account);
+    //     return
+    //         userShare
+    //             .mul(baseTokenPerShareStored.sub(userBaseTokenPerSharePaid[account]))
+    //             .div(1e18)
+    //             .add(userOwnedBaseToken[account]);
+    // }
 
     /* ========== USER MUTATIVE FUNCTIONS ========== */
 
     function deposit(uint256 _amount) external nonReentrant {
-        _updateReward(msg.sender);
         _deposit(_amount);
     }
 
@@ -196,14 +206,11 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
             r,
             s
         );
-        _updateReward(msg.sender);
         _deposit(amount);
     }
 
     // No rebalance implementation for lower fees and faster swaps
     function withdraw(uint256 _shares) public nonReentrant {
-        _updateReward(msg.sender);
-
         uint256 r = (balance().mul(_shares)).div(totalSupply());
         _burn(msg.sender, _shares);
 
@@ -223,20 +230,14 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         emit Withdraw(msg.sender, _shares, r);
     }
 
-    function claim() public {
-        _updateReward(msg.sender);
-
-        uint256 baseTokenToSend = userOwnedBaseToken[msg.sender];
-        if (baseTokenToSend > 0) {
-            userOwnedBaseToken[msg.sender] = 0;
-            baseToken.safeTransfer(msg.sender, baseTokenToSend);
-        }
-        emit Claim(msg.sender, baseTokenToSend);
+    function earn() public {
+        // uint256 _bal = available();
+        // token.safeTransfer(controller, _bal);
+        // IController(controller).earn(address(token), _bal);
     }
 
     function exit() external {
         withdraw(balanceOf(msg.sender));
-        claim();
     }
 
     // Override underlying transfer function to update reward before transfer, except on staking/withdraw to token master
@@ -245,9 +246,6 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         address to,
         uint256 amount
     ) internal virtual override {
-        _updateReward(from);
-        _updateReward(to);
-
         super._beforeTokenTransfer(from, to, amount);
     }
 
@@ -287,48 +285,48 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         emit Harvest(msg.sender, keeperFee, newAmount);
     }
 
-    function sellToBase(uint256 _amount) external onlyFundManager {
-        require(_amount > 0, 'amount can not be less than 0');
-        // todo:: check rewardToken balance
-        uint256 _baseTokenBefore = IERC20(baseToken).balanceOf(address(this));
-        uint256 _before = IERC20(token).balanceOf(address(this));
+    // function sellToBase(uint256 _amount) external onlyFundManager {
+    //     require(_amount > 0, 'amount can not be less than 0');
+    //     // todo:: check rewardToken balance
+    //     uint256 _baseTokenBefore = IERC20(baseToken).balanceOf(address(this));
+    //     uint256 _before = IERC20(token).balanceOf(address(this));
 
-        _safeSwap(address(token), address(baseToken), _amount);
+    //     _safeSwap(address(token), address(baseToken), _amount);
 
-        uint256 _baseTokenAfter = IERC20(baseToken).balanceOf(address(this));
-        uint256 _after = IERC20(token).balanceOf(address(this));
+    //     uint256 _baseTokenAfter = IERC20(baseToken).balanceOf(address(this));
+    //     uint256 _after = IERC20(token).balanceOf(address(this));
 
-        uint256 _baseTokenDiff = _baseTokenAfter.sub(_baseTokenBefore);
-        uint256 _diff = _before.sub(_after);
+    //     uint256 _baseTokenDiff = _baseTokenAfter.sub(_baseTokenBefore);
+    //     uint256 _diff = _before.sub(_after);
 
-        // todo:: check math here
-        uint256 _baseTokenDiffPerShare = _baseTokenDiff.div(totalSupply());
-        baseTokenPerShareStored = baseTokenPerShareStored.add(_baseTokenDiffPerShare);
+    //     // todo:: check math here
+    //     uint256 _baseTokenDiffPerShare = _baseTokenDiff.div(totalSupply());
+    //     baseTokenPerShareStored = baseTokenPerShareStored.add(_baseTokenDiffPerShare);
 
-        emit tokenToBaseSold(_diff, _baseTokenDiff);
-    }
+    //     emit tokenToBaseSold(_diff, _baseTokenDiff);
+    // }
 
-    // Todo:: more tests
-    function buyFromBase(uint256 _amount) external onlyFundManager {
-        require(_amount > 0, 'amount can not be less than 0');
-        // todo:: check rewardToken balance
-        uint256 _baseTokenBefore = IERC20(baseToken).balanceOf(address(this));
-        uint256 _before = IERC20(token).balanceOf(address(this));
+    // // Todo:: more tests
+    // function buyFromBase(uint256 _amount) external onlyFundManager {
+    //     require(_amount > 0, 'amount can not be less than 0');
+    //     // todo:: check rewardToken balance
+    //     uint256 _baseTokenBefore = IERC20(baseToken).balanceOf(address(this));
+    //     uint256 _before = IERC20(token).balanceOf(address(this));
 
-        _safeSwap(address(baseToken), address(token), _amount);
+    //     _safeSwap(address(baseToken), address(token), _amount);
 
-        uint256 _baseTokenAfter = IERC20(baseToken).balanceOf(address(this));
-        uint256 _after = IERC20(token).balanceOf(address(this));
+    //     uint256 _baseTokenAfter = IERC20(baseToken).balanceOf(address(this));
+    //     uint256 _after = IERC20(token).balanceOf(address(this));
 
-        uint256 _baseTokenDiff = _baseTokenBefore.sub(_baseTokenAfter);
-        uint256 _diff = _after.sub(_before);
+    //     uint256 _baseTokenDiff = _baseTokenBefore.sub(_baseTokenAfter);
+    //     uint256 _diff = _after.sub(_before);
 
-        // todo:: check math here
-        uint256 _baseTokenDiffPerShare = _baseTokenDiff.div(totalSupply());
-        baseTokenPerShareStored = baseTokenPerShareStored.sub(_baseTokenDiffPerShare);
-        require(baseTokenPerShareStored > 0, 'base-token-share-stored-can-not-be-zero');
-        emit tokenFromBaseBought(_diff, _baseTokenDiff);
-    }
+    //     // todo:: check math here
+    //     uint256 _baseTokenDiffPerShare = _baseTokenDiff.div(totalSupply());
+    //     baseTokenPerShareStored = baseTokenPerShareStored.sub(_baseTokenDiffPerShare);
+    //     require(baseTokenPerShareStored > 0, 'base-token-share-stored-can-not-be-zero');
+    //     emit tokenFromBaseBought(_diff, _baseTokenDiff);
+    // }
 
     /* ========== INTERNAL FUNCTIONS ========== */
 
@@ -345,11 +343,6 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         }
         _mint(msg.sender, shares);
         emit Deposit(msg.sender, shares, _amount);
-    }
-
-    function _updateReward(address account) internal {
-        userOwnedBaseToken[account] = baseTokenEarned(account);
-        userBaseTokenPerSharePaid[account] = baseTokenPerShareStored;
     }
 
     /**
@@ -430,12 +423,6 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
         keepers[_address] = false;
     }
 
-    function setBaseToken(address _new) external {
-        require(msg.sender == governance, "!governance");
-        require(baseToken.balanceOf(address(this)) == 0, 'old-base-token-is-not-zero');
-        baseToken = IERC20(_new);
-    }
-
     // todo: use pending
     function setFundManager(address _new) external {
         require(msg.sender == governance, "!governance");
@@ -482,7 +469,6 @@ abstract contract GrowVault is ERC20, Pausable, ReentrancyGuard {
 
     event Deposit(address indexed user, uint256 shares, uint256 amount);
     event Withdraw(address indexed user, uint256 shares, uint256 amount);
-    event Claim(address indexed user, uint256 amount);
     event Farm(address indexed keeper, uint256 keeperFee, uint256 farmedAmount);
     event Harvest(
         address indexed keeper,
