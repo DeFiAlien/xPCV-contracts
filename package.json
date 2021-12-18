@@ -1,0 +1,36 @@
+{
+  "name": "xPCV Protocol",
+  "version": "1.0.0",
+  "description": "xPCV Protocol v1.0 solidity contracts repo",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "build": "waffle",
+    "test": "export NODE_ENV=test && mocha"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^3.2.0",
+    "dotenv-flow": "^3.2.0",
+    "ethers": "4.0.46"
+  },
+  "devDependencies": {
+    "@truffle/hdwallet-provider": "^1.0.40",
+    "truffle": "^5.0.44",
+    "truffle-flattener": "^1.5.0",
+    "truffle-plugin-verify": "^0.3.11",
+    "@types/chai": "^4.2.6",
+    "@types/mocha": "^5.2.7",
+    "chai": "^4.2.0",
+    "ethereum-waffle": "2.4.1",
+    "ethereumjs-util": "^6.2.0",
+    "mocha": "^6.2.2",
+    "ncp": "^2.0.0",
+    "prettier": "^1.19.1",
+    "rimraf": "^3.0.0",
+    "solc": "0.6.6",
+    "ts-node": "^8.5.4",
+    "typescript": "^3.7.3"
+  }
+}
