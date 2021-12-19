@@ -26,7 +26,7 @@ module.exports = {
       network_id: '1',
       provider: () => new HDWalletProvider(
         [process.env.DEPLOYER_PRIVATE_KEY],
-        "https://mainnet.infura.io/v3/" + process.env.MAINNET_INFURA_API_KEY,
+        "https://mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
         0,
         1,
       ),
@@ -39,7 +39,7 @@ module.exports = {
       network_id: '42',
       provider: () => new HDWalletProvider(
         [process.env.DEPLOYER_PRIVATE_KEY],
-        "wss://kovan.infura.io/ws/v3/" + process.env.KOVAN_INFURA_API_KEY,
+        "wss://kovan.infura.io/ws/v3/" + process.env.INFURA_API_KEY,
         0,
         1,
       ),
